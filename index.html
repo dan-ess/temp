@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sim's Birthday Cracktro</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Press+Start+2P&display=swap">
+<style>
+  /* Layout: one 16:10 CRT demo screen centred on black, key legend underneath. Deliberately single dark theme. */
+  :root {
+    --void: #000;
+    --bezel: #0d0b1f;
+    --phosphor: #7cf8ff;
+    --dim: #5a6496;
+    --gold: #ffd23d;
+    --pixel: "Press Start 2P", ui-monospace, Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--void);
+    color: var(--dim);
+    font-family: var(--pixel);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    box-sizing: border-box;
+    padding-block: 12px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    overflow: hidden;
+  }
+  .screen {
+    position: relative;
+    width: min(100%, calc((100vh - 110px) * 1.6));
+    width: min(100%, calc((100dvh - 110px) * 1.6));
+    max-width: 100%;
+    aspect-ratio: 16 / 10;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--void);
+    box-shadow: 0 0 0 3px var(--bezel), 0 0 80px rgba(124, 248, 255, 0.10);
+  }
+  .screen canvas { display: block; width: 100%; height: 100%; cursor: pointer; }
+  .screen canvas:focus-visible { outline: 2px solid var(--phosphor); outline-offset: -2px; }
+  .screen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 3px),
+      radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, 0.55) 100%);
+  }
+  .keys {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 22px;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    line-height: 1.8;
+    text-align: center;
+  }
+  .keys b { color: var(--phosphor); font-weight: normal; }
+  .keys .gold { color: var(--gold); }
+</style>
+</head>
+<body>
+
+<div class="screen" id="screen">
+  <canvas id="demo" width="1280" height="800" tabindex="0"
+    aria-label="Birthday demo for Sim by The Smart Boys. Click or press space for music, keys 1 to 5 toggle the trainer."></canvas>
+</div>
+<p class="keys">
+  <span><b>CLICK</b> / <b>SPACE</b> MUSIC</span>
+  <span><b>1-5</b> OR TAP: TRAINER</span>
+  <span><b>M</b> MUTE</span>
+  <span><b>F</b> FULLSCREEN</span>
+  <span class="gold">THE SMART BOYS 2026</span>
+</p>
+
+<script>
+// ---- Edit the scroll text here ----
+const SCROLLTEXT =
+  "YO YO YO!!!   THE SMART BOYS ARE BACK ONCE AGAIN, BRINGING YOU THIS EPIC RELEASE ...   " +
+  "SIM: BIRTHDAY EDITION!   ANOTHER YEAR CRACKED, TRAINED AND PACKED FOR YOUR PLEASURE.   " +
+  "RELEASE NOTES: SIM HAS LEVELLED UP. ALL STATS +1. WISDOM +1. KNEES -1. CHARM WAS ALREADY MAXED OUT.   " +
+  "USE KEYS 1-5 TO ACTIVATE THE TRAINER. WARNING: AGE FREEZE IS NOT SUPPORTED ON THIS HARDWARE. WE TRIED.   " +
+  "NO HANGOVER MAY ALSO NOT WORK AS ADVERTISED. NO REFUNDS.   " +
+  "HAPPY BIRTHDAY SIM, YOU ABSOLUTE LEGEND! HAVE AN AMAZING DAY AND AN EVEN BETTER YEAR!   " +
+  "GREETINGS FLY OUT TO ALL THE SMART BOYS ... SIM'S MUM FOR THE ORIGINAL RELEASE ... " +
+  "EVERY BARTENDER WHO HAS EVER SERVED US ... AND NOBODY ELSE, BECAUSE EVERYONE ELSE IS A LAMER.   " +
+  "CODE: DAN.   MUSIC: A CERTAIN BIRTHDAY SONG, RIPPED AND REMIXED.   GFX: THE SMART BOYS.   " +
+  "REMEMBER: IF YOU LIKE THIS BIRTHDAY, BUY THE NEXT ROUND!   ...   TEXT RESTARTS ...          ";
+
+const W = 640, H = 400, TAU = Math.PI * 2;
+const MS = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0.35 : 1;
+const PIXEL = '"Press Start 2P", monospace';
+const LOGO_TEXT = "THE SMART BOYS";
+
+const cv = document.getElementById("demo");
+const ctx = cv.getContext("2d");
+const logo = document.createElement("canvas");
+const scr = document.createElement("canvas");
+const sctx = scr.getContext("2d");
+let S = 2, scrGrad = null;
+
+// ---------- sizing ----------
+function resize() {
+  const r = cv.getBoundingClientRect();
+  if (!r.width) return;
+  const next = Math.max(1, Math.min(3, Math.ceil(r.width * (devicePixelRatio || 1) / W)));
+  if (next === S && cv.width === W * S) return;
+  S = next;
+  cv.width = W * S; cv.height = H * S;
+  scr.width = W * S; scr.height = 64 * S;
+  buildScroller();
+  buildLogo();
+}
+
+function buildScroller() {
+  sctx.setTransform(S, 0, 0, S, 0, 0);
+  scrGrad = sctx.createLinearGradient(0, 4, 0, 60);
+  scrGrad.addColorStop(0, "#ff3df0");
+  scrGrad.addColorStop(0.3, "#ffd23d");
+  scrGrad.addColorStop(0.5, "#ffffff");
+  scrGrad.addColorStop(0.7, "#7cf8ff");
+  scrGrad.addColorStop(1, "#3d5bff");
+}
+
+function buildLogo() {
+  logo.width = W * S; logo.height = 96 * S;
+  const g = logo.getContext("2d");
+  g.setTransform(S, 0, 0, S, 0, 0);
+  let size = 60;
+  g.font = `${size}px Bungee, Impact, sans-serif`;
+  const tw = g.measureText(LOGO_TEXT).width;
+  if (tw > 596) { size = size * 596 / tw; g.font = `${size}px Bungee, Impact, sans-serif`; }
+  g.textAlign = "center"; g.textBaseline = "middle";
+  const x = W / 2, y = 50, top = y - size * 0.42, bot = y + size * 0.42;
+  g.fillStyle = "#000"; g.fillText(LOGO_TEXT, x + 5, y + 5);
+  g.lineJoin = "round"; g.lineWidth = 7; g.strokeStyle = "#0a0630"; g.strokeText(LOGO_TEXT, x, y);
+  const gr = g.createLinearGradient(0, top, 0, bot);
+  gr.addColorStop(0, "#2a3cff");
+  gr.addColorStop(0.38, "#bfe8ff");
+  gr.addColorStop(0.5, "#ffffff");
+  gr.addColorStop(0.52, "#4a2a10");
+  gr.addColorStop(0.72, "#ff8a1d");
+  gr.addColorStop(1, "#ffe9a8");
+  g.fillStyle = gr; g.fillText(LOGO_TEXT, x, y);
+  g.lineWidth = 1; g.strokeStyle = "rgba(255,255,255,0.55)"; g.strokeText(LOGO_TEXT, x, y);
+}
+
+new ResizeObserver(resize).observe(cv);
+resize();
+Promise.all([
+  document.fonts.load('60px "Bungee"'),
+  document.fonts.load('10px "Press Start 2P"'),
+]).then(buildLogo, buildLogo);
+
+// ---------- trainer ----------
+const OPTS = [
+  { name: "INFINITE CAKE", on: false },
+  { name: "UNLIMITED BEER", on: false },
+  { name: "NO HANGOVER", on: false },
+  { name: "AGE FREEZE", on: false, deny: -1 },
+  { name: "GOD MODE", on: false },
+];
+const BOX = { x: 20, y: 186, w: 310, h: 112 };
+const rowY = i => BOX.y + 40 + i * 14;
+let hoverRow = -1, flash = 0, boxFlash = 0;
+
+function toggle(i) {
+  const o = OPTS[i];
+  boxFlash = 1;
+  if (i === 3) { o.deny = t + 2; sfx("buzz"); return; }
+  o.on = !o.on;
+  sfx(o.on ? "on" : "off");
+  if (i === 0) buildCake();
+  if (i === 4 && o.on) flash = 1;
+}
+
+// ---------- cake ----------
+let cake = [];
+function buildCake() {
+  cake = [];
+  const tiers = OPTS[0].on
+    ? [[70, 22, "#ff6fb5"], [52, 18, "#fff1c9"], [34, 16, "#7dffcf"]]
+    : [[70, 26, "#ff6fb5"], [48, 22, "#fff1c9"]];
+  let y = 0, topR = 0;
+  for (const [r, h, c] of tiers) {
+    const n = Math.round(r * 0.6);
+    for (let k = 0; k < n; k++) {
+      const a = k / n * TAU, x = Math.cos(a) * r, z = Math.sin(a) * r;
+      cake.push({ x, y, z, c }, { x, y: y - h, z, c });
+      cake.push({ x, y: y - h + 3 + Math.abs(Math.sin(a * 6)) * 5, z, c: "#ffffff" });
+      if (k % 3 === 0) for (let j = 1; j < 4; j++) cake.push({ x, y: y - h * j / 4, z, c });
+    }
+    y -= h; topR = r;
+  }
+  const sprinkle = ["#ff3df0", "#7cf8ff", "#ffd23d", "#5dff7a", "#ffffff"];
+  for (let k = 0; k < 18; k++) {
+    const a = Math.random() * TAU, d = Math.sqrt(Math.random()) * topR * 0.85;
+    cake.push({ x: Math.cos(a) * d, y, z: Math.sin(a) * d, c: sprinkle[k % 5] });
+  }
+  for (let k = 0; k < 5; k++) {
+    const a = k / 5 * TAU + 0.3, x = Math.cos(a) * topR * 0.55, z = Math.sin(a) * topR * 0.55;
+    for (let j = 0; j <= 4; j++) cake.push({ x, y: y - j * 3.5, z, c: j % 2 ? "#ffffff" : "#7cf8ff" });
+    cake.push({ x, y: y - 19, z, flame: true, seed: k * 1.7 });
+  }
+}
+buildCake();
+
+function drawCake() {
+  const a = t * 0.9 * MS, b = 0.38, ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
+  const cx = 478, cy = 278;
+  const pts = cake.map(p => {
+    const x1 = p.x * ca + p.z * sa, z1 = -p.x * sa + p.z * ca;
+    const y2 = p.y * cb - z1 * sb, z2 = p.y * sb + z1 * cb;
+    const f = 300 / (300 + z2);
+    return { p, sx: cx + x1 * f, sy: cy + y2 * f, z: z2, f };
+  }).sort((u, v) => v.z - u.z);
+  for (const q of pts) {
+    if (q.p.flame) {
+      const fl = 2.5 + Math.sin(t * 23 + q.p.seed) * 0.8 + Math.random() * 0.8;
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = "#ff7a1d";
+      ctx.beginPath(); ctx.arc(q.sx, q.sy, fl * 2.4, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = Math.random() < 0.5 ? "#ffd23d" : "#fff6c2";
+      ctx.beginPath(); ctx.ellipse(q.sx, q.sy, fl * 0.7, fl * 1.3, 0, 0, TAU); ctx.fill();
+      continue;
+    }
+    ctx.globalAlpha = Math.max(0.25, Math.min(1, 0.65 - q.z / 140));
+    ctx.fillStyle = q.p.c;
+    const s = 2.2 * q.f;
+    ctx.fillRect(q.sx - s / 2, q.sy - s / 2, s, s);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- stars ----------
+const newStar = any => ({ x: (Math.random() * 2 - 1) * W, y: (Math.random() * 2 - 1) * H, z: any ? Math.random() + 0.05 : 1.05 });
+const stars = Array.from({ length: 180 }, () => newStar(true));
+function drawStars(dt) {
+  const speed = (OPTS[4].on ? 0.7 : 0.22) * MS;
+  for (const s of stars) {
+    s.z -= dt * speed;
+    if (s.z <= 0.05) Object.assign(s, newStar(false));
+    const sx = W / 2 + s.x * 0.5 / s.z, sy = H / 2 + s.y * 0.5 / s.z;
+    if (sx < 0 || sx > W || sy < 0 || sy > H) continue;
+    const k = 1.05 - s.z, sz = k * 2.5 + 0.5;
+    ctx.fillStyle = OPTS[4].on ? `hsl(${(s.x + t * 200) % 360},100%,${40 + k * 50}%)` : `rgba(200,220,255,${0.25 + k * 0.75})`;
+    ctx.fillRect(sx, sy, sz, sz);
+  }
+}
+
+// ---------- copper bars, raster lines, logo ----------
+const BAR_HUES = [0, 25, 48, 140, 190, 225, 285];
+function drawCoppers() {
+  const bars = BAR_HUES.map((h, i) => {
+    const ph = t * 1.7 * MS + i * 0.55;
+    return { y: 56 + Math.sin(ph) * 40, z: Math.cos(ph), h: OPTS[4].on ? (t * 120 + i * 50) % 360 : h };
+  }).sort((u, v) => u.z - v.z);
+  for (const b of bars) {
+    const g = ctx.createLinearGradient(0, b.y - 8, 0, b.y + 8);
+    g.addColorStop(0, `hsl(${b.h},100%,6%)`);
+    g.addColorStop(0.5, `hsl(${b.h},100%,${62 + b.z * 12}%)`);
+    g.addColorStop(1, `hsl(${b.h},100%,6%)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, b.y - 8, W, 16);
+  }
+}
+
+function raster(y, p) {
+  for (let x = 0; x < W; x += 8) {
+    ctx.fillStyle = `hsl(${(x * 0.9 + t * 220) % 360},100%,${50 + p * 30}%)`;
+    ctx.fillRect(x, y, 8, 2);
+  }
+}
+
+function drawLogo() {
+  const amp = (OPTS[1].on ? 16 : 6) * MS;
+  for (let y = 0; y < 96; y++) {
+    const off = Math.sin(t * 2.2 + y * 0.08) * amp;
+    ctx.drawImage(logo, 0, y * S, W * S, S, off, 8 + y, W, 1);
+  }
+}
+
+// ---------- text ----------
+function drawPresent() {
+  ctx.font = `10px ${PIXEL}`;
+  ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+  const playing = audioOn && ac.state === "running";
+  const prompt = !playing && Math.floor(t * 1.25) % 2 === 0;
+  const msg = prompt ? "CLICK OR PRESS SPACE FOR MUSIC" : "- PROUDLY PRESENT -";
+  ctx.fillStyle = prompt ? "#ffd23d" : `hsl(185,100%,${70 + Math.sin(t * 6) * 20}%)`;
+  ctx.fillText(msg, W / 2, 130);
+  ctx.textAlign = "left";
+}
+
+function drawBirthday(p) {
+  const s = "HAPPY BIRTHDAY SIM!", cw = 22, x0 = (W - s.length * cw) / 2;
+  ctx.font = `22px ${PIXEL}`; ctx.textBaseline = "alphabetic";
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === " ") continue;
+    const x = x0 + i * cw + (OPTS[1].on ? Math.sin(t * 3 + i) * 3 * MS : 0);
+    const y = 172 - Math.abs(Math.sin(t * 4 * MS + i * 0.33)) * 12 * MS;
+    ctx.fillStyle = "#000"; ctx.fillText(s[i], x + 3, y + 3);
+    ctx.fillStyle = `hsl(${(t * 120 + i * 20) % 360},100%,${55 + p * 25}%)`;
+    ctx.fillText(s[i], x, y);
+  }
+}
+
+function drawTrainer() {
+  const { x, y, w, h } = BOX;
+  boxFlash = Math.max(0, boxFlash - 0.05);
+  ctx.fillStyle = `rgba(${10 + boxFlash * 80},${4 + boxFlash * 40},${36 + boxFlash * 60},0.82)`;
+  ctx.fillRect(x, y, w, h);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = `hsl(${(t * 90) % 360},100%,60%)`;
+  ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = `hsl(${(t * 90 + 180) % 360},100%,60%)`;
+  ctx.strokeRect(x + 5.5, y + 5.5, w - 11, h - 11);
+
+  ctx.font = `8px ${PIXEL}`; ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "center"; ctx.fillStyle = "#ffd23d";
+  ctx.fillText("SIM v.NEXT  +5 TRAINER", x + w / 2, y + 22);
+  ctx.textAlign = "left";
+
+  OPTS.forEach((o, i) => {
+    const ry = rowY(i);
+    if (i === hoverRow) {
+      const g = ctx.createLinearGradient(0, ry - 11, 0, ry + 4);
+      g.addColorStop(0, "rgba(61,91,255,0)"); g.addColorStop(0.5, "rgba(61,91,255,0.7)"); g.addColorStop(1, "rgba(61,91,255,0)");
+      ctx.fillStyle = g; ctx.fillRect(x + 8, ry - 11, w - 16, 15);
+    }
+    const label = `[${i + 1}] ${o.name}`;
+    let val = "OFF", col = "#6a76a8";
+    if (i === 3 && t < o.deny) { val = "NICE TRY"; col = Math.floor(t * 8) % 2 ? "#ff4040" : "#ffffff"; }
+    else if (o.on) { val = "ON"; col = "#5dff7a"; }
+    const dots = Math.max(0, Math.floor((w - 28 - (label.length + val.length + 1) * 8) / 8));
+    ctx.fillStyle = "#e6ecff"; ctx.fillText(label, x + 14, ry);
+    ctx.fillStyle = "#3a4270"; ctx.fillText(" " + ".".repeat(dots), x + 14 + label.length * 8, ry);
+    ctx.fillStyle = col; ctx.textAlign = "right"; ctx.fillText(val, x + w - 14, ry); ctx.textAlign = "left";
+  });
+}
+
+// ---------- scroller ----------
+let scrollX = 0;
+const CW = 28;
+function drawScroller(dt) {
+  sctx.clearRect(0, 0, W, 64);
+  sctx.font = `28px ${PIXEL}`; sctx.textBaseline = "middle"; sctx.textAlign = "left";
+  scrollX += dt * 140;
+  const total = W + SCROLLTEXT.length * CW;
+  if (scrollX > total) scrollX -= total;
+  const first = Math.max(0, Math.floor((scrollX - W) / CW) - 1);
+  for (let k = first; k < SCROLLTEXT.length; k++) {
+    const x = W + k * CW - scrollX;
+    if (x > W) break;
+    if (x < -CW || SCROLLTEXT[k] === " ") continue;
+    const y = 32 + Math.sin(x * 0.018 + t * 3) * 12 * MS;
+    sctx.fillStyle = "#000"; sctx.fillText(SCROLLTEXT[k], x + 3, y + 3);
+    sctx.fillStyle = scrGrad; sctx.fillText(SCROLLTEXT[k], x, y);
+  }
+  ctx.drawImage(scr, 0, 0, W * S, 64 * S, 0, 308, W, 64);
+
+  const water = ctx.createLinearGradient(0, 372, 0, H);
+  water.addColorStop(0, "#06104a"); water.addColorStop(1, "#000");
+  ctx.fillStyle = water; ctx.fillRect(0, 372, W, H - 372);
+  for (let r = 0; r < 28; r++) {
+    const src = Math.floor(62 - r * 2.2);
+    ctx.globalAlpha = 0.45 * (1 - r / 28);
+    ctx.drawImage(scr, 0, src * S, W * S, S, Math.sin(t * 4 + r * 0.7) * 3 * MS, 372 + r, W, 1);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- main loop ----------
+let t = 0, last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now; t += dt;
+  const p = pulse();
+  ctx.setTransform(S, 0, 0, S, 0, 0);
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+  drawStars(dt);
+  drawCoppers();
+  drawLogo();
+  raster(106, p);
+  drawPresent();
+  drawBirthday(p);
+  drawTrainer();
+  drawCake();
+  raster(304, p);
+  drawScroller(dt);
+  if (flash > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${flash})`; ctx.fillRect(0, 0, W, H);
+    flash = Math.max(0, flash - dt * 2.5);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ---------- chiptune: Happy Birthday, 3/4 at 150 BPM ----------
+let ac = null, master, leadBus, bassBus, noise, audioOn = false, muted = false;
+let nextTime = 0, step = 0, lastKick = -10;
+const kickQ = [];
+const BPM = 150, STEP = 60 / BPM / 4;
+const CHORDS = { G: [55, 59, 62], D: [50, 54, 57], C: [48, 52, 55] };
+const ROOT = { G: 43, D: 38, C: 36 };
+const INTRO = ["G", "G", "D", "G"];
+const PROG = ["G", "D", "D", "G", "G", "C", "G", "G"];
+// [step in 96-step loop, MIDI note, length in steps]
+const LEAD = [
+  [0, 64, 4], [4, 62, 4], [8, 67, 4], [12, 66, 8], [20, 62, 3], [23, 62, 1],
+  [24, 64, 4], [28, 62, 4], [32, 69, 4], [36, 67, 8], [44, 62, 3], [47, 62, 1],
+  [48, 74, 4], [52, 71, 4], [56, 67, 4], [60, 66, 4], [64, 64, 4], [68, 72, 3], [71, 72, 1],
+  [72, 71, 4], [76, 67, 4], [80, 69, 4], [84, 67, 8], [92, 62, 3], [95, 62, 1],
+];
+const leadAt = new Map(LEAD.map(e => [e[0], e]));
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+
+function startAudio() {
+  if (ac) { if (ac.state !== "running") ac.resume(); return; }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  // iOS 17+: play through the ring/silent switch like a media app
+  if (navigator.audioSession) { try { navigator.audioSession.type = "playback"; } catch (err) {} }
+  ac = new AC();
+  ac.resume();
+  // iOS only unlocks audio output if something plays inside the tap itself
+  const unlock = ac.createBufferSource();
+  unlock.buffer = ac.createBuffer(1, 1, 22050);
+  unlock.connect(ac.destination);
+  unlock.start(0);
+  master = ac.createGain(); master.gain.value = 0.45;
+  const comp = ac.createDynamicsCompressor();
+  master.connect(comp).connect(ac.destination);
+  leadBus = ac.createGain(); leadBus.connect(master);
+  const delay = ac.createDelay(); delay.delayTime.value = STEP * 3;
+  const fb = ac.createGain(); fb.gain.value = 0.35;
+  const wet = ac.createGain(); wet.gain.value = 0.4;
+  leadBus.connect(delay); delay.connect(fb).connect(delay); delay.connect(wet).connect(master);
+  bassBus = ac.createBiquadFilter(); bassBus.type = "lowpass"; bassBus.frequency.value = 850; bassBus.connect(master);
+  noise = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+  const d = noise.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  nextTime = ac.currentTime + 0.1;
+  audioOn = true;
+  setInterval(schedule, 25);
+}
+
+function schedule() {
+  if (nextTime < ac.currentTime - 0.2) nextTime = ac.currentTime + 0.05;
+  while (nextTime < ac.currentTime + 0.12) { playStep(step, nextTime); nextTime += STEP; step++; }
+}
+
+function playStep(s, time) {
+  const bar = Math.floor(s / 12), sb = s % 12, sub = sb % 4, intro = bar < 4;
+  const ch = intro ? INTRO[bar] : PROG[(bar - 4) % 8];
+  if (sb === 0 || sb === 6) kick(time);
+  if (sb === 8) snare(time);
+  else if (sub === 2) hat(time, 0.07);
+  else if (!intro && sub !== 0) hat(time, 0.03);
+  if (sub === 0 || sub === 2) tone("square", mtof(ROOT[ch] + (sub === 2 ? 12 : 0)), time, STEP * 1.6, 0.11, bassBus);
+  if (bar >= 2) {
+    const n = CHORDS[ch][sb % 3] + 12 + (Math.floor(sb / 3) % 2) * 12;
+    tone("square", mtof(n), time, STEP * 0.8, 0.03, master);
+  }
+  const ls = !intro ? (s - 48) % 96 : (bar === 3 && sb >= 8 ? 84 + sb : -1);
+  const e = leadAt.get(ls);
+  if (e) lead(mtof(e[1] + 12), time, e[2] * STEP);
+}
+
+function tone(type, f, time, dur, g, dest, f2) {
+  const o = ac.createOscillator(), v = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, time);
+  if (f2) o.frequency.exponentialRampToValueAtTime(f2, time + dur);
+  v.gain.setValueAtTime(g, time);
+  v.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+  o.connect(v).connect(dest);
+  o.start(time); o.stop(time + dur + 0.02);
+}
+
+function lead(f, time, dur) {
+  const v = ac.createGain();
+  v.gain.setValueAtTime(0.0001, time);
+  v.gain.linearRampToValueAtTime(0.085, time + 0.006);
+  v.gain.setValueAtTime(0.07, time + dur * 0.85);
+  v.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+  v.connect(leadBus);
+  const lfo = ac.createOscillator(), depth = ac.createGain();
+  lfo.frequency.value = 6;
+  depth.gain.setValueAtTime(0, time);
+  depth.gain.linearRampToValueAtTime(f * 0.012, time + Math.min(0.3, dur));
+  lfo.connect(depth);
+  for (const det of [-7, 7]) {
+    const o = ac.createOscillator();
+    o.type = "square"; o.frequency.value = f; o.detune.value = det;
+    depth.connect(o.frequency);
+    o.connect(v); o.start(time); o.stop(time + dur + 0.02);
+  }
+  lfo.start(time); lfo.stop(time + dur + 0.02);
+}
+
+function noiseHit(time, g, dur, type, freq) {
+  const src = ac.createBufferSource(), flt = ac.createBiquadFilter(), v = ac.createGain();
+  src.buffer = noise; flt.type = type; flt.frequency.value = freq;
+  v.gain.setValueAtTime(g, time); v.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+  src.connect(flt).connect(v).connect(master);
+  src.start(time); src.stop(time + dur + 0.02);
+}
+
+function kick(time) {
+  tone("sine", 150, time, 0.22, 0.6, master, 42);
+  kickQ.push(time);
+}
+function snare(time) {
+  noiseHit(time, 0.28, 0.16, "highpass", 1200);
+  tone("triangle", 190, time, 0.08, 0.2, master, 120);
+}
+function hat(time, g) { noiseHit(time, g, 0.04, "highpass", 7000); }
+
+function sfx(kind) {
+  if (!ac) return;
+  const now = ac.currentTime;
+  if (kind === "on") tone("square", 660, now, 0.12, 0.12, master, 1760);
+  else if (kind === "off") tone("square", 1320, now, 0.12, 0.1, master, 440);
+  else { tone("sawtooth", 110, now, 0.35, 0.18, master, 70); tone("square", 116, now, 0.35, 0.1, master, 72); }
+}
+
+function pulse() {
+  if (ac && audioOn) {
+    const now = ac.currentTime;
+    while (kickQ.length && kickQ[0] <= now) lastKick = kickQ.shift();
+    return muted ? 0 : Math.exp(-(now - lastKick) * 7);
+  }
+  return Math.exp(-(t % 0.8) * 7) * 0.6;
+}
+
+function setMuted(m) {
+  muted = m;
+  if (master) master.gain.setTargetAtTime(muted ? 0 : 0.45, ac.currentTime, 0.02);
+}
+
+// ---------- input ----------
+function toDemo(e) {
+  const r = cv.getBoundingClientRect();
+  return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+}
+function rowAt(pt) {
+  if (pt.x < BOX.x || pt.x > BOX.x + BOX.w) return -1;
+  for (let i = 0; i < OPTS.length; i++) if (pt.y > rowY(i) - 11 && pt.y < rowY(i) + 4) return i;
+  return -1;
+}
+cv.addEventListener("pointermove", e => { hoverRow = rowAt(toDemo(e)); });
+cv.addEventListener("pointerleave", () => { hoverRow = -1; });
+// Phones only allow audio from certain gestures, so listen for all of them
+for (const type of ["touchend", "pointerup", "mousedown"]) addEventListener(type, startAudio, { passive: true });
+cv.addEventListener("click", e => {
+  startAudio();
+  const i = rowAt(toDemo(e));
+  if (i >= 0) toggle(i);
+});
+addEventListener("keydown", e => {
+  if (e.key === " " || e.key === "Enter") { e.preventDefault(); startAudio(); }
+  else if (e.key >= "1" && e.key <= "5") { startAudio(); toggle(+e.key - 1); }
+  else if (e.key === "m" || e.key === "M") setMuted(!muted);
+  else if (e.key === "f" || e.key === "F") {
+    const el = document.getElementById("screen");
+    try {
+      const req = document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen();
+      if (req && req.catch) req.catch(() => {});
+    } catch (err) {}
+  }
+});
+</script>
+</body>
+</html>
