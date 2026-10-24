@@ -117,7 +117,7 @@ function resize() {
   const r = cv.getBoundingClientRect();
   if (!r.width) return;
   const next = Math.max(1, Math.min(3, Math.ceil(r.width * (devicePixelRatio || 1) / W)));
-  if (next === S && cv.width === W * S) return;
+  if (next === S && scr.width === W * S) return;
   S = next;
   cv.width = W * S; cv.height = H * S;
   scr.width = W * S; scr.height = 64 * S;
